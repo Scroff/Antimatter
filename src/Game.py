@@ -5,10 +5,17 @@ WINDOW_WIDTH = 600
 WINDOW_HEIGHT = 600
 COLORKEY = (255,0,255)
 
+KEY_UP = pygame.K_UP
+KEY_DOWN = pygame.K_DOWN
+KEY_LEFT = pygame.K_LEFT
+KEY_RIGHT = pygame.K_RIGHT
+KEY_FLIP = pygame.K_SPACE
+
 PLAYER_RADIUS = 10
 PLAYER_ATTRACTRADIUS = 60
 PLAYER_FORCE = 10
 PLAYER_MAXSPEED = 10
+PLAYER_ACCELERATION = 5
 
 MAX_PARTICLES = 10
 MAT_COLOR = (255,0,0)
@@ -103,32 +110,50 @@ class Particle:
         self.direction[1] *= -1
         
 class Player(Particle):
-    def __init__(self, radius, sprite, attractRadius, force, maxSpeed):
+    def __init__(self, radius, sprite, attractRadius, force, maxSpeed, acceleration):
         Particle.__init__(self, radius, maxSpeed, True, attractRadius, force, (0,255,255))
-        self.position = [50,50]
+        self.acceleration = acceleration
+        self.position = [200,200]
         self.direction = [0,0]
+        self.speed = [0,0]
         self.radius = radius
         self.sprite = sprite
     
     def draw(self, screen):
         """ Draws the player.
         screen: Surface to draw on """
-        #pygame.draw.circle(screen, self.color, self.position, self.attractRadius) # Draw attract radius
-        screen.blit(self.sprite, self.position)
+        pygame.draw.circle(screen, self.color, self.position, self.attractRadius) # Draw attract radius
+        x, y = self.position
+        x -= self.radius
+        y -= self.radius
+        screen.blit(self.sprite, (x,y))
         
     def update(self, sec):
         """
         Updates player position etc
         sec: Time in seconds since last update """
-        mpos = pygame.mouse.get_pos()
-        self.position[0] = mpos[0]
-        self.position[1] = mpos[1]
+        self.position[0] += self.speed[0]
+        self.position[1] += self.speed[1]
+        
+        self.speed[0] += self.direction[0] * (self.acceleration * sec) # Update speed with acceleration
+        self.speed[1] += self.direction[1] * (self.acceleration * sec) # TODO: Needs friction
+        
+        if self.speed[0] > self.maxSpeed: # Make sure speed is within limit
+            self.speed[0] = self.maxSpeed
+        if self.speed[0] < self.maxSpeed * -1:
+            self.speed[0] = self.maxSpeed * -1
+            
+        if self.speed[1] > self.maxSpeed:
+            self.speed[1] = self.maxSpeed
+        if self.speed[1] < self.maxSpeed * -1:
+            self.speed[1] = self.maxSpeed * -1
+        
         
     def flipPolarity(self):
         """
         Flips between matter and antimatter """
         self.matter = not self.matter # TODO: Change colour here too
-        
+    
 class ParticleManager:
     def __init__(self, maxParticles, matColor, antiColor, radius, maxSpeed, attractRadius, force, player, spawnRate, explosionMan):
         """
@@ -232,11 +257,11 @@ class ParticleManager:
             self.deadList.append(self.aliveList[toDie[i] - i])
             del self.aliveList[toDie[i] - i]
         # Now that we have tried to kill our particles, lets see if we can ressurect a few
-        if len(self.deadList) > 0 and self.lastSpawn > self.spawnRate:
-            self.spawnParticle()
-            self.lastSpawn = 0.0
-        
-        self.lastSpawn += sec
+        if len(self.deadList) > 0:
+            self.lastSpawn += sec
+            if self.lastSpawn > self.spawnRate:
+                self.spawnParticle()
+                self.lastSpawn = 0.0
     
     def draw(self, screen):
         for alive in self.aliveList:
@@ -252,13 +277,25 @@ class EnemyManager(ParticleManager):
         Pretty much just a modified ParticleManager with some values set to 0 """
         ParticleManager.__init__(self, maxEnemies, color, color, radius, 0, 0, 0, player, spawnRate, explosionMan)
        
-    """def update(self, sec):
+    def update(self, sec):
         i = 0
         offset = 0
         limit = len(self.aliveList)
         while i < limit: # Loop through alive enemies to see if any are getting blown up
-            continue # TODO: stuff here"""
-              
+            e = self.aliveList[i - offset]
+            die = explosionMan.checkCollision(e.position, e.radius)
+            if die: # Bogey down
+                self.deadList.append(e)
+                del self.aliveList[i - offset]
+                offset += 1
+            i += 1
+        
+        if len(self.deadList) > 0: # Bring the little beggers back
+            self.lastSpawn += sec
+            if self.lastSpawn > self.spawnRate:
+                self.spawnParticle()
+                self.lastSpawn = 0
+
 class Explosion:
     def __init__(self, maxTime, growthRate, color, position):
         self.maxTime = maxTime # Time in seconds to stay alive
@@ -305,11 +342,43 @@ class ExplosionManager:
     def draw(self, screen):
         for exp in self.active:
             exp.draw(screen)
+    
+    def checkCollision(self, pos, radius):
+        """ Checks to see if any explosions are within this range 
+        Returns True if there is a collision, False if not """
+        for exp in self.active:
+            x1, y1 = exp.position
+            x2, y2 = pos
+            dist = ((x1 - x2) ** 2 + (y2 - y1) ** 2) ** 0.5
+            if dist < radius + exp.radius:
+                return True
+        return False
             
 def input(events): # Handles input
+    moveDir = player.direction # Direction to move player based on input
     for event in events:
         if event.type == QUIT: # Quit event
             sys.exit(0)
+        
+        if event.type == KEYDOWN:
+            if event.key == KEY_UP:
+                moveDir[1] -= 1
+            elif event.key == KEY_DOWN:
+                moveDir[1] += 1
+            elif event.key == KEY_LEFT:
+                moveDir[0] -= 1
+            elif event.key == KEY_RIGHT:
+                moveDir[0] += 1
+        
+        elif event.type == KEYUP:
+            if event.key == KEY_UP:
+                moveDir[1] += 1
+            elif event.key == KEY_DOWN:
+                moveDir[1] -= 1
+            elif event.key == KEY_LEFT:
+                moveDir[0] += 1
+            elif event.key == KEY_RIGHT:
+                moveDir[0] -= 1
 
 def loadImage(name, colorkey):
     """
@@ -332,7 +401,7 @@ screen = pygame.display.get_surface()
 updateRate = 50 # ms between updates
 playerSprite = loadImage("player.bmp", COLORKEY)
 explosionMan = ExplosionManager(EXPLOSION_MAXTIME, EXPLOSION_GROWTHRATE, EXPLOSION_COLOR)
-player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED)
+player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION)
 particleMan = ParticleManager(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
 particleMan.spawnAll()
 enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
