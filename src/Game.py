@@ -1,4 +1,4 @@
-import pygame, sys, os, random, math
+import pygame, sys, os, random, math, copy
 from pygame.locals import *
 
 WINDOW_WIDTH = 600
@@ -11,11 +11,11 @@ KEY_LEFT = pygame.K_LEFT
 KEY_RIGHT = pygame.K_RIGHT
 KEY_FLIP = pygame.K_SPACE
 
-PLAYER_RADIUS = 10
+PLAYER_RADIUS = 13
 PLAYER_ATTRACTRADIUS = 60
-PLAYER_FORCE = 10
-PLAYER_MAXSPEED = 10
-PLAYER_ACCELERATION = 5
+PLAYER_FORCE = 100
+PLAYER_MAXSPEED = 200
+PLAYER_ACCELERATION = 400
 
 MAX_PARTICLES = 10
 MAT_COLOR = (255,0,0)
@@ -44,10 +44,10 @@ class Particle:
         attractRadius = Radius at which will attract another polarity particle 
         color = Color to draw particle """
         self.radius = radius
-        self.maxSpeed = maxSpeed
+        self.maxSpeed = maxSpeed # NOT IMPLMENTED
         self.matter = matter
         self.position = [0,0]
-        self.direction = [0,0]
+        self.speed = [0,0]
         self.attractRadius = attractRadius
         self.force = force;
         self.color = color
@@ -55,8 +55,8 @@ class Particle:
     def update(self, sec):
         """
         sec = Time since last update in seconds """
-        self.position[0] += self.direction[0] * sec # Move along x axis
-        self.position[1] += self.direction[1] * sec # Move along y axis
+        self.position[0] += self.speed[0] * sec # Move along x axis
+        self.position[1] += self.speed[1] * sec # Move along y axis
         if(self.position[0] + self.radius > WINDOW_WIDTH or 
            self.position[0] - self.radius < 0 or 
            self.position[1] + self.radius > WINDOW_HEIGHT or
@@ -85,29 +85,43 @@ class Particle:
             return 0
         return -1
     
-    def collide(self, part2):
-        self.bounce() # TODO: Things look a bit wonky when bouncing, can prob fix that
-        part2.bounce()
+    def collide(self, part2, updateSelf=True):
+        part2.speed = self.bounce(part2.speed)
     
-    def attract(self, part2):
+    def attract(self, part2, updateSelf=True):
         xdist = self.position[0] - part2.position[0]
         ydist = self.position[1] - part2.position[1]
         dist = (xdist ** 2 + ydist ** 2) ** 0.5
         force1 = self.force / dist # Strength of force moving part1
         force2 = part2.force / dist # Strength of force moving part2
         newPos = [part2.position[0] + (xdist / 2), part2.position[1] + (ydist / 2)] # Point to move towards
-        # New find the normalised unit vector between the points and this one
+        # Now find the normalised unit vector between the points and this one
         vector1 = [(newPos[0] - self.position[0]) / dist, (newPos[1] - self.position[1]) / dist]
         vector2 = [(newPos[0] - part2.position[0]) / dist, (newPos[1] - part2.position[1]) / dist]
-        # Modify direction for each particle
-        self.direction[0] += vector1[0] * force1
-        self.direction[1] += vector1[1] * force1
-        part2.direction[0] += vector2[0] * force2
-        part2.direction[1] += vector2[1] * force2
+        # Modify speed for each particle
+        if updateSelf:
+            self.speed[0] += vector1[0] * force1
+            self.speed[1] += vector1[1] * force1
+        part2.speed[0] += vector2[0] * force2
+        part2.speed[1] += vector2[1] * force2
 
-    def bounce(self):
-        self.direction[0] *= -1
-        self.direction[1] *= -1
+    def bounce(self, speed=None):
+        """
+        If a speed is supplied, it does a more compelx calculation 
+        Returns None if no speed supplied or the modified speed if it is supplied """
+        self.speed[0] *= -1
+        self.speed[1] *= -1
+        if speed is not None:
+            avgx = (math.fabs(self.speed[0]) + math.fabs(speed[0])) / 2 # Average x and y velocities
+            avgy = (math.fabs(self.speed[1]) + math.fabs(speed[1])) / 2
+            self.speed[0] = math.copysign(avgx, self.speed[0])
+            self.speed[1] = math.copysign(avgy, self.speed[1])
+            speed[0] = math.copysign(avgx, speed[0] * -1)
+            speed[1] = math.copysign(avgy, speed[1] * -1)
+        
+        return speed
+            
+            
         
 class Player(Particle):
     def __init__(self, radius, sprite, attractRadius, force, maxSpeed, acceleration):
@@ -115,7 +129,6 @@ class Player(Particle):
         self.acceleration = acceleration
         self.position = [200,200]
         self.direction = [0,0]
-        self.speed = [0,0]
         self.radius = radius
         self.sprite = sprite
     
@@ -132,8 +145,8 @@ class Player(Particle):
         """
         Updates player position etc
         sec: Time in seconds since last update """
-        self.position[0] += self.speed[0]
-        self.position[1] += self.speed[1]
+        self.position[0] += self.speed[0] * sec
+        self.position[1] += self.speed[1] * sec
         
         self.speed[0] += self.direction[0] * (self.acceleration * sec) # Update speed with acceleration
         self.speed[1] += self.direction[1] * (self.acceleration * sec) # TODO: Needs friction
@@ -147,6 +160,13 @@ class Player(Particle):
             self.speed[1] = self.maxSpeed
         if self.speed[1] < self.maxSpeed * -1:
             self.speed[1] = self.maxSpeed * -1
+        
+        if(self.position[0] + self.radius > WINDOW_WIDTH or 
+           self.position[0] - self.radius < 0 or 
+           self.position[1] + self.radius > WINDOW_HEIGHT or
+           self.position[1] - self.radius < 0): # We are out of bounds, go back
+            self.speed[0] *= -1
+            self.speed[1] *= -1 # TODO: Direction does different things in Player and Particle, could fix this
         
         
     def flipPolarity(self):
@@ -179,7 +199,7 @@ class ParticleManager:
         self.lastSpawn = 0.0 # Time since last spawn
 
         for i in range(maxParticles): # All particles start off dead so add them to dead list
-            matter = (i % 2 == 0) # Half matter, half antimatter
+            matter = True # (i % 2 == 0) # Half matter, half antimatter
             if matter:
                 color = matColor
             else:
@@ -216,7 +236,7 @@ class ParticleManager:
                         break # We are in range of another particle so don't spawn here
                 
             part.position = pos;
-            part.direction = [0,0]
+            part.speed = [0,0]
             self.aliveList.append(part)
     
     def spawnAll(self):
@@ -229,12 +249,15 @@ class ParticleManager:
         toDie = [] # List of particles which have to die when we finish
         for i in range(len(self.aliveList)):
             part1 = self.aliveList[i]
+            oldPos = copy.deepcopy(part1.position)
+            part1.update(sec)
             for j in range(i+1, len(self.aliveList)): # Check all the ones after this particle for collision
                 part2 = self.aliveList[j]
                 collide = part1.checkCollision(part2.position, part2.radius, part2.attractRadius)
                 if collide == 1: # Full on collision
                     if part1.matter == part2.matter: # Same stuff so just bounce
                         part1.collide(part2)
+                        part1.position = oldPos
                     else: # Uh oh... things are gonna blow up here
                         toDie.append(i) # Marked for death
                         toDie.append(j) # TODO: Implement explosions
@@ -247,10 +270,9 @@ class ParticleManager:
             
             collide = part1.checkCollision(player.position, player.radius, player.attractRadius) # Check proximity to player
             if collide == 1: # TODO: Need to check player collisions
-                player.collide(part1)
+                player.collide(part1, False)
             if collide == 0:
-                player.attract(part1)
-            part1.update(sec)
+                player.attract(part1, False)
         # Each time we remove one from alive, the counter drops
         toDie.sort() # So if we sort it first, we can use an offset of i
         for i in range(len(toDie)):
@@ -421,7 +443,8 @@ while 1: # main loop
     screen.fill((0,0,0))
     
     explosionMan.draw(screen)
+    player.draw(screen)
     enemyMan.draw(screen)
     particleMan.draw(screen)
-    player.draw(screen)
+
     pygame.display.flip() # Update changes to screen
