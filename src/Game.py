@@ -15,7 +15,8 @@ PLAYER_RADIUS = 13
 PLAYER_ATTRACTRADIUS = 60
 PLAYER_FORCE = 100
 PLAYER_MAXSPEED = 200
-PLAYER_ACCELERATION = 400
+PLAYER_ACCELERATION = 600
+PLAYER_FRICTION = 200
 
 MAX_PARTICLES = 10
 MAT_COLOR = (255,0,0)
@@ -35,7 +36,8 @@ EXPLOSION_MAXTIME = 2
 EXPLOSION_GROWTHRATE = 30
 EXPLOSION_COLOR = (255,82,30)
 
-TEXT_COLOR = (0,255,255)
+TEXT_COLOR = (255,255,255)
+SCORE_POSITION = (25,25)
 
 class Particle:
     def __init__(self, radius, maxSpeed, matter, attractRadius, force, color):
@@ -126,7 +128,7 @@ class Particle:
             
         
 class Player(Particle):
-    def __init__(self, radius, sprite, attractRadius, force, maxSpeed, acceleration):
+    def __init__(self, radius, sprite, attractRadius, force, maxSpeed, acceleration, friction):
         Particle.__init__(self, radius, maxSpeed, True, attractRadius, force, MAT_COLOR)
         self.acceleration = acceleration
         self.position = [200,200]
@@ -134,6 +136,7 @@ class Player(Particle):
         self.radius = radius
         self.sprite = sprite # Not used
         self.alive = True
+        self.friction = friction
 
     
     """def draw(self, screen):
@@ -152,6 +155,9 @@ class Player(Particle):
         
         self.speed[0] += self.direction[0] * (self.acceleration * sec) # Update speed with acceleration
         self.speed[1] += self.direction[1] * (self.acceleration * sec) # TODO: Needs friction
+        
+        self.speed[0] -= math.copysign(self.friction * sec, self.speed[0]) # reduce friction
+        self.speed[1] -= math.copysign(self.friction * sec, self.speed[1])
         
         if self.speed[0] > self.maxSpeed: # Make sure speed is within limit
             self.speed[0] = self.maxSpeed
@@ -306,6 +312,7 @@ class EnemyManager(ParticleManager):
         ParticleManager.__init__(self, maxEnemies, color, color, radius, 0, 0, 0, player, spawnRate, explosionMan)
        
     def update(self, sec):
+        """ Returns the number of enemies destroyed this pass """
         i = 0
         offset = 0
         limit = len(self.aliveList)
@@ -323,6 +330,8 @@ class EnemyManager(ParticleManager):
             if self.lastSpawn > self.spawnRate:
                 self.spawnParticle()
                 self.lastSpawn = 0
+        
+        return offset
 
 class Explosion:
     def __init__(self, maxTime, growthRate, color, position):
@@ -384,12 +393,12 @@ class ExplosionManager:
 
 
 def resetGame():
-    player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION)
-    particleMan = ParticleManager(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
+    player.__init__(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
+    particleMan.__init__(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
     particleMan.spawnAll()
-    enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
+    enemyMan.__init__(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
     enemyMan.spawnAll()
-    player.alive = True
+    score = 0
     print "Game reset" # TODO: Reset not working, can prob just use __init__()
                
 def input(events): # Handles input
@@ -449,11 +458,25 @@ screen = pygame.display.get_surface()
 updateRate = 50 # ms between updates
 playerSprite = loadImage("player.bmp", COLORKEY)
 explosionMan = ExplosionManager(EXPLOSION_MAXTIME, EXPLOSION_GROWTHRATE, EXPLOSION_COLOR)
-player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION)
+player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
 particleMan = ParticleManager(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
 particleMan.spawnAll()
 enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
 enemyMan.spawnAll()
+
+gameOverFont = pygame.font.Font(None, 76) # Default font 76 size
+gameOverText = gameOverFont.render("GAME OVER", 1, TEXT_COLOR)
+gameOverTextPos = gameOverText.get_rect()
+gameOverTextPos.centerx = (WINDOW_WIDTH / 2)
+gameOverTextPos.centery = (WINDOW_HEIGHT / 2)
+
+scoreFont = pygame.font.Font(None, 36)
+score = 0
+
+resetText = scoreFont.render("<Press Space or A to reset>", 1, TEXT_COLOR)
+resetTextPos = resetText.get_rect()
+resetTextPos.centerx = gameOverTextPos.centerx
+resetTextPos.centery = gameOverTextPos.centery + gameOverTextPos.height
 
 clock = pygame.time.Clock()
 
@@ -466,7 +489,7 @@ while 1: # main loop
         player.update(secs)
         particleMan.update(secs)
         explosionMan.update(secs)
-        enemyMan.update(secs)
+        score += enemyMan.update(secs)
         
         screen.fill((0,0,0))
         
@@ -474,9 +497,11 @@ while 1: # main loop
         player.draw(screen)
         enemyMan.draw(screen)
         particleMan.draw(screen)
-    
-        pygame.display.flip() # Update changes to screen
+        scoreString = "Score: " + str(score)
+        scoreText = scoreFont.render(scoreString, 1, TEXT_COLOR)
+        screen.blit(scoreText, SCORE_POSITION)
     else:
-        font = pygame.font.Font(None, 76) # Default font 76 size
-        text = font.render("GAME OVER", 1, TEXT_COLOR)
-        screen.blit(text, (100,100))
+        screen.blit(gameOverText, gameOverTextPos) # Game over, show death screen
+        screen.blit(resetText, resetTextPos)
+ 
+    pygame.display.flip() # Update changes to screen
