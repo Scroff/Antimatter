@@ -125,21 +125,20 @@ class Particle:
         
 class Player(Particle):
     def __init__(self, radius, sprite, attractRadius, force, maxSpeed, acceleration):
-        Particle.__init__(self, radius, maxSpeed, True, attractRadius, force, (0,255,255))
+        Particle.__init__(self, radius, maxSpeed, True, attractRadius, force, MAT_COLOR)
         self.acceleration = acceleration
         self.position = [200,200]
         self.direction = [0,0]
         self.radius = radius
-        self.sprite = sprite
+        self.sprite = sprite # Not used
+
     
-    def draw(self, screen):
-        """ Draws the player.
-        screen: Surface to draw on """
+    """def draw(self, screen):
         pygame.draw.circle(screen, self.color, self.position, self.attractRadius) # Draw attract radius
         x, y = self.position
         x -= self.radius
         y -= self.radius
-        screen.blit(self.sprite, (x,y))
+        screen.blit(self.sprite, (x,y))"""
         
     def update(self, sec):
         """
@@ -172,7 +171,11 @@ class Player(Particle):
     def flipPolarity(self):
         """
         Flips between matter and antimatter """
-        self.matter = not self.matter # TODO: Change colour here too
+        self.matter = not self.matter
+        if self.matter:
+            self.color = MAT_COLOR
+        else:
+            self.color = ANTI_COLOR
     
 class ParticleManager:
     def __init__(self, maxParticles, matColor, antiColor, radius, maxSpeed, attractRadius, force, player, spawnRate, explosionMan):
@@ -199,7 +202,7 @@ class ParticleManager:
         self.lastSpawn = 0.0 # Time since last spawn
 
         for i in range(maxParticles): # All particles start off dead so add them to dead list
-            matter = True # (i % 2 == 0) # Half matter, half antimatter
+            matter = (i % 2 == 0) # Half matter, half antimatter
             if matter:
                 color = matColor
             else:
@@ -269,9 +272,10 @@ class ParticleManager:
                     part1.attract(part2)
             
             collide = part1.checkCollision(player.position, player.radius, player.attractRadius) # Check proximity to player
-            if collide == 1: # TODO: Need to check player collisions
+            if collide == 1 and player.matter is not part1.matter: # TODO: Need to check player collisions
                 player.collide(part1, False)
-            if collide == 0:
+                part1.position = oldPos # TODO: Colliding at certain angles still sticks
+            if collide == 0 and player.matter is not part1.matter:
                 player.attract(part1, False)
         # Each time we remove one from alive, the counter drops
         toDie.sort() # So if we sort it first, we can use an offset of i
@@ -391,6 +395,8 @@ def input(events): # Handles input
                 moveDir[0] -= 1
             elif event.key == KEY_RIGHT:
                 moveDir[0] += 1
+            elif event.key == KEY_FLIP:
+                player.flipPolarity()
         
         elif event.type == KEYUP:
             if event.key == KEY_UP:
@@ -430,6 +436,7 @@ enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE,
 enemyMan.spawnAll()
 
 clock = pygame.time.Clock()
+gameOver = False
 
 while 1: # main loop
     input(pygame.event.get()) # Get input
