@@ -1,4 +1,4 @@
-import pygame, sys, os, random, math, copy
+import pygame, sys, os, random, math, copy, vector
 from pygame.locals import *
 
 WINDOW_WIDTH = 600
@@ -12,22 +12,22 @@ KEY_RIGHT = pygame.K_RIGHT
 KEY_FLIP = pygame.K_SPACE
 
 PLAYER_RADIUS = 13
-PLAYER_ATTRACTRADIUS = 60
-PLAYER_FORCE = 100
+PLAYER_ATTRACTRADIUS = 100
+PLAYER_FORCE = 200
 PLAYER_MAXSPEED = 200
 PLAYER_ACCELERATION = 600
 PLAYER_FRICTION = 200
 
-MAX_PARTICLES = 10
+MAX_PARTICLES = 20
 MAT_COLOR = (255,0,0)
 ANTI_COLOR = (0,255,0)
 PARTICLE_RADIUS = 10
-PARTICLE_MAXSPEED = 20
+PARTICLE_MAXSPEED = 250
 PARTICLE_ATTRACTRADIUS = 20
 PARTICLE_FORCE = 10
 PARTICLE_SPAWNRATE = 5
 
-MAX_ENEMIES = 5
+MAX_ENEMIES = 10
 ENEMY_COLOR = (100, 20, 250)
 ENEMY_RADIUS = 5
 ENEMY_SPAWNRATE = 5
@@ -66,6 +66,7 @@ class Particle:
            self.position[1] + self.radius > WINDOW_HEIGHT or
            self.position[1] - self.radius < 0): # We are out of bounds, go back
             self.bounce()
+        self.limitSpeed()
             
     
     def draw(self, screen):
@@ -124,6 +125,31 @@ class Particle:
             speed[1] = math.copysign(avgy, speed[1] * -1)
         
         return speed
+    
+    def bounce2(self, p2):
+        """ More complicated bounce, should give better angles.
+        Takes in the particle it is bouncing against and updates its speed too """
+        
+        avgSpeed = vector.scale(vector.absAdd(self.speed, p2.speed), 0.5) # Average speed
+        # Find the normalised vector from p1 to p2
+        n = vector.unit(vector.subtract(self.position, p2.position))
+        
+        self.speed = vector.multiply(n, avgSpeed)
+        p2.speed = vector.scale(vector.multiply(n, avgSpeed), -1)
+        
+        self.limitSpeed()
+        p2.limitSpeed()
+        
+    def limitSpeed(self):
+        if self.speed[0] > self.maxSpeed: # Make sure speed is within limit
+            self.speed[0] = self.maxSpeed
+        if self.speed[0] < self.maxSpeed * -1:
+            self.speed[0] = self.maxSpeed * -1
+            
+        if self.speed[1] > self.maxSpeed:
+            self.speed[1] = self.maxSpeed
+        if self.speed[1] < self.maxSpeed * -1:
+            self.speed[1] = self.maxSpeed * -1
             
             
         
@@ -154,20 +180,12 @@ class Player(Particle):
         self.position[1] += self.speed[1] * sec
         
         self.speed[0] += self.direction[0] * (self.acceleration * sec) # Update speed with acceleration
-        self.speed[1] += self.direction[1] * (self.acceleration * sec) # TODO: Needs friction
+        self.speed[1] += self.direction[1] * (self.acceleration * sec)
         
         self.speed[0] -= math.copysign(self.friction * sec, self.speed[0]) # reduce friction
         self.speed[1] -= math.copysign(self.friction * sec, self.speed[1])
         
-        if self.speed[0] > self.maxSpeed: # Make sure speed is within limit
-            self.speed[0] = self.maxSpeed
-        if self.speed[0] < self.maxSpeed * -1:
-            self.speed[0] = self.maxSpeed * -1
-            
-        if self.speed[1] > self.maxSpeed:
-            self.speed[1] = self.maxSpeed
-        if self.speed[1] < self.maxSpeed * -1:
-            self.speed[1] = self.maxSpeed * -1
+        self.limitSpeed()
         
         if(self.position[0] + self.radius > WINDOW_WIDTH or 
            self.position[0] - self.radius < 0 or 
@@ -268,7 +286,8 @@ class ParticleManager:
                 collide = part1.checkCollision(part2.position, part2.radius, part2.attractRadius)
                 if collide == 1: # Full on collision
                     if part1.matter == part2.matter: # Same stuff so just bounce
-                        part1.collide(part2)
+                        #part1.collide(part2)
+                        part1.bounce2(part2)
                         part1.position = oldPos
                     else: # Uh oh... things are gonna blow up here
                         toDie.append(i) # Marked for death
@@ -300,10 +319,6 @@ class ParticleManager:
     def draw(self, screen):
         for alive in self.aliveList:
             alive.draw(screen)
-
-class Ememy(Particle):
-    def __init__(self, radius, color):
-        Particle.__init__(self, radius, 0, True, 0, 0, color)
         
 class EnemyManager(ParticleManager):
     def __init__(self, maxEnemies, color, radius, spawnRate, explosionMan):
@@ -386,9 +401,9 @@ class ExplosionManager:
         for exp in self.active:
             x1, y1 = exp.position
             x2, y2 = pos
-            dist = ((x1 - x2) ** 2 + (y2 - y1) ** 2) ** 0.5
-            if dist < radius + exp.radius:
-                return True
+            dist = ((x1 - x2) ** 2 + (y2 - y1) ** 2)
+            if dist < (radius + exp.radius) ** 2: # Squaring is less intensive than sqrt
+                return True # Balls are touching
         return False
 
 
@@ -398,6 +413,8 @@ def resetGame():
     particleMan.spawnAll()
     enemyMan.__init__(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
     enemyMan.spawnAll()
+    explosionMan.__init__(EXPLOSION_MAXTIME, EXPLOSION_GROWTHRATE, EXPLOSION_COLOR)
+    global score
     score = 0
     print "Game reset" # TODO: Reset not working, can prob just use __init__()
                
