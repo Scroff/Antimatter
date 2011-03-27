@@ -35,6 +35,8 @@ EXPLOSION_MAXTIME = 2
 EXPLOSION_GROWTHRATE = 30
 EXPLOSION_COLOR = (255,82,30)
 
+TEXT_COLOR = (0,255,255)
+
 class Particle:
     def __init__(self, radius, maxSpeed, matter, attractRadius, force, color):
         """
@@ -131,6 +133,7 @@ class Player(Particle):
         self.direction = [0,0]
         self.radius = radius
         self.sprite = sprite # Not used
+        self.alive = True
 
     
     """def draw(self, screen):
@@ -272,9 +275,8 @@ class ParticleManager:
                     part1.attract(part2)
             
             collide = part1.checkCollision(player.position, player.radius, player.attractRadius) # Check proximity to player
-            if collide == 1 and player.matter is not part1.matter: # TODO: Need to check player collisions
-                player.collide(part1, False)
-                part1.position = oldPos # TODO: Colliding at certain angles still sticks
+            if collide == 1 and player.matter is not part1.matter: # Ru roh
+                player.alive = False
             if collide == 0 and player.matter is not part1.matter:
                 player.attract(part1, False)
         # Each time we remove one from alive, the counter drops
@@ -379,7 +381,17 @@ class ExplosionManager:
             if dist < radius + exp.radius:
                 return True
         return False
-            
+
+
+def resetGame():
+    player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION)
+    particleMan = ParticleManager(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
+    particleMan.spawnAll()
+    enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
+    enemyMan.spawnAll()
+    player.alive = True
+    print "Game reset" # TODO: Reset not working, can prob just use __init__()
+               
 def input(events): # Handles input
     moveDir = player.direction # Direction to move player based on input
     for event in events:
@@ -387,26 +399,33 @@ def input(events): # Handles input
             sys.exit(0)
         
         if event.type == KEYDOWN:
-            if event.key == KEY_UP:
-                moveDir[1] -= 1
-            elif event.key == KEY_DOWN:
-                moveDir[1] += 1
-            elif event.key == KEY_LEFT:
-                moveDir[0] -= 1
-            elif event.key == KEY_RIGHT:
-                moveDir[0] += 1
-            elif event.key == KEY_FLIP:
-                player.flipPolarity()
+            if player.alive:
+                if event.key == KEY_UP:
+                    moveDir[1] -= 1
+                elif event.key == KEY_DOWN:
+                    moveDir[1] += 1
+                elif event.key == KEY_LEFT:
+                    moveDir[0] -= 1
+                elif event.key == KEY_RIGHT:
+                    moveDir[0] += 1
+                elif event.key == KEY_FLIP:
+                    player.flipPolarity()
+                elif event.key == pygame.K_a:
+                    resetGame()
+            else:
+                if event.key == KEY_FLIP:
+                    resetGame()
         
         elif event.type == KEYUP:
-            if event.key == KEY_UP:
-                moveDir[1] += 1
-            elif event.key == KEY_DOWN:
-                moveDir[1] -= 1
-            elif event.key == KEY_LEFT:
-                moveDir[0] += 1
-            elif event.key == KEY_RIGHT:
-                moveDir[0] -= 1
+            if player.alive:
+                if event.key == KEY_UP:
+                    moveDir[1] += 1
+                elif event.key == KEY_DOWN:
+                    moveDir[1] -= 1
+                elif event.key == KEY_LEFT:
+                    moveDir[0] += 1
+                elif event.key == KEY_RIGHT:
+                    moveDir[0] -= 1
 
 def loadImage(name, colorkey):
     """
@@ -423,6 +442,7 @@ def loadImage(name, colorkey):
     image.set_colorkey(colorkey, RLEACCEL)
     return image
 
+        
 pygame.init(); # initialise pygame
 window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 screen = pygame.display.get_surface()
@@ -436,22 +456,27 @@ enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE,
 enemyMan.spawnAll()
 
 clock = pygame.time.Clock()
-gameOver = False
 
 while 1: # main loop
-    input(pygame.event.get()) # Get input
-    ms = clock.tick_busy_loop() # Time since last update in ms
-    secs = ms / 1000.0 # Time in seconds
-    player.update(secs)
-    particleMan.update(secs)
-    explosionMan.update(secs)
-    enemyMan.update(secs)
-    
-    screen.fill((0,0,0))
-    
-    explosionMan.draw(screen)
-    player.draw(screen)
-    enemyMan.draw(screen)
-    particleMan.draw(screen)
 
-    pygame.display.flip() # Update changes to screen
+    input(pygame.event.get()) # Get input
+    if player.alive:
+        ms = clock.tick_busy_loop() # Time since last update in ms
+        secs = ms / 1000.0 # Time in seconds
+        player.update(secs)
+        particleMan.update(secs)
+        explosionMan.update(secs)
+        enemyMan.update(secs)
+        
+        screen.fill((0,0,0))
+        
+        explosionMan.draw(screen)
+        player.draw(screen)
+        enemyMan.draw(screen)
+        particleMan.draw(screen)
+    
+        pygame.display.flip() # Update changes to screen
+    else:
+        font = pygame.font.Font(None, 76) # Default font 76 size
+        text = font.render("GAME OVER", 1, TEXT_COLOR)
+        screen.blit(text, (100,100))
