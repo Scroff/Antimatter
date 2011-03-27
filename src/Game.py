@@ -408,7 +408,7 @@ class ExplosionManager:
 
 
 def resetGame():
-    player.__init__(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
+    player.__init__(PLAYER_RADIUS , None, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
     particleMan.__init__(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
     particleMan.spawnAll()
     enemyMan.__init__(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
@@ -473,9 +473,9 @@ pygame.init(); # initialise pygame
 window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 screen = pygame.display.get_surface()
 updateRate = 50 # ms between updates
-playerSprite = loadImage("player.bmp", COLORKEY)
+#playerSprite = loadImage("player.bmp", COLORKEY)
 explosionMan = ExplosionManager(EXPLOSION_MAXTIME, EXPLOSION_GROWTHRATE, EXPLOSION_COLOR)
-player = Player(PLAYER_RADIUS , playerSprite, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
+player = Player(PLAYER_RADIUS , None, PLAYER_ATTRACTRADIUS, PLAYER_FORCE, PLAYER_MAXSPEED, PLAYER_ACCELERATION, PLAYER_FRICTION)
 particleMan = ParticleManager(MAX_PARTICLES, MAT_COLOR, ANTI_COLOR, PARTICLE_RADIUS, PARTICLE_MAXSPEED, PARTICLE_ATTRACTRADIUS, PARTICLE_FORCE, player, PARTICLE_SPAWNRATE, explosionMan)
 particleMan.spawnAll()
 enemyMan = EnemyManager(MAX_ENEMIES, ENEMY_COLOR, ENEMY_RADIUS, ENEMY_SPAWNRATE, explosionMan)
