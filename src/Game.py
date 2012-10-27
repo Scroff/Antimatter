@@ -74,7 +74,7 @@ class Particle:
         screen = Screen to draw onto """
         
         #pygame.draw.circle(screen, (0,255,255), self.position, self.attractRadius) # Draw attract radius (debug)
-        pygame.draw.circle(screen, self.color, self.position, self.radius)
+        pygame.draw.circle(screen, self.color, (int(self.position[0]), int(self.position[1])), self.radius)
         
     def checkCollision(self, pos, radius, attractRadius):
         """
@@ -367,7 +367,7 @@ class Explosion:
         return True
     
     def draw(self, screen):
-        pygame.draw.circle(screen, self.color, self.position, self.radius)
+        pygame.draw.circle(screen, self.color, (int(self.position[0]), int(self.position[1])), int(self.radius))
         
 class ExplosionManager:
     def __init__(self, maxTime, growthRate, color):
